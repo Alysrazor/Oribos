@@ -112,6 +112,8 @@ Battleground::Battleground(BattlegroundTemplate const* battlegroundTemplate) : _
     StartMessageIds[BG_STARTING_EVENT_FOURTH] = BG_TEXT_BATTLE_HAS_BEGUN;
 }
 
+Battleground::Battleground(Battleground const&) = default;
+
 Battleground::~Battleground()
 {
     // remove objects and creatures
@@ -138,6 +140,8 @@ Battleground::~Battleground()
 
     for (BattlegroundScoreMap::const_iterator itr = PlayerScores.begin(); itr != PlayerScores.end(); ++itr)
         delete itr->second;
+
+    _playerPositions.clear();
 }
 
 void Battleground::Update(uint32 diff)
@@ -248,7 +252,16 @@ void Battleground::_ProcessPlayerPositionBroadcast(uint32 diff)
         m_LastPlayerPositionBroadcast = 0;
 
         WorldPackets::Battleground::BattlegroundPlayerPositions playerPositions;
-        GetPlayerPositionData(&playerPositions.FlagCarriers);
+
+        for (WorldPackets::Battleground::BattlegroundPlayerPosition& playerPosition : _playerPositions)
+        {
+            // Update position data if we found player.
+            if (Player* player = ObjectAccessor::GetPlayer(GetBgMap(), playerPosition.Guid))
+                playerPosition.Pos = player->GetPosition();
+
+            playerPositions.FlagCarriers.push_back(playerPosition);
+        }
+
         SendPacketToAll(playerPositions.Write());
     }
 }
@@ -398,11 +411,11 @@ inline void Battleground::_ProcessJoin(uint32 diff)
     // Send packet every 10 seconds until the 2nd field reach 0
     if (m_CountdownTimer >= 10000)
     {
-        int32 countdownMaxForBGType = isArena() ? ARENA_COUNTDOWN_MAX : BATTLEGROUND_COUNTDOWN_MAX;
+        Seconds countdownMaxForBGType = Seconds(isArena() ? ARENA_COUNTDOWN_MAX : BATTLEGROUND_COUNTDOWN_MAX);
 
         WorldPackets::Misc::StartTimer startTimer;
         startTimer.Type         = 0;
-        startTimer.TimeLeft     = countdownMaxForBGType - (GetElapsedTime() / 1000);
+        startTimer.TimeLeft     = std::chrono::duration_cast<Seconds>(countdownMaxForBGType - Milliseconds(GetElapsedTime()));
         startTimer.TotalTime    = countdownMaxForBGType;
 
         for (BattlegroundPlayerMap::const_iterator itr = GetPlayers().begin(); itr != GetPlayers().end(); ++itr)
@@ -732,7 +745,7 @@ void Battleground::EndBattleground(uint32 winner)
 
     WorldPackets::Battleground::PVPMatchComplete pvpMatchComplete;
     pvpMatchComplete.Winner = GetWinner();
-    pvpMatchComplete.Duration = std::max<int32>(0, (GetElapsedTime() - BG_START_DELAY_2M) / IN_MILLISECONDS);
+    pvpMatchComplete.Duration = std::chrono::duration_cast<Seconds>(Milliseconds(std::max<int32>(0, (GetElapsedTime() - BG_START_DELAY_2M))));
     pvpMatchComplete.LogData.emplace();
     BuildPvPLogDataPacket(*pvpMatchComplete.LogData);
     pvpMatchComplete.Write();
@@ -992,6 +1005,8 @@ void Battleground::Reset()
     PlayerScores.clear();
 
     ResetBGSubclass();
+
+    _playerPositions.clear();
 }
 
 void Battleground::StartBattleground()
@@ -1061,8 +1076,9 @@ void Battleground::AddPlayer(Player* player)
 
     if (GetElapsedTime() >= BG_START_DELAY_2M)
     {
-        pvpMatchInitialize.Duration = (GetElapsedTime() - BG_START_DELAY_2M) / IN_MILLISECONDS;
-        pvpMatchInitialize.StartTime = GameTime::GetGameTime() - pvpMatchInitialize.Duration;
+        Milliseconds duration(GetElapsedTime() - BG_START_DELAY_2M);
+        pvpMatchInitialize.Duration = std::chrono::duration_cast<Seconds>(duration);
+        pvpMatchInitialize.StartTime = GameTime::GetGameTimeSystemPoint() - duration;
     }
     pvpMatchInitialize.ArenaFaction = player->GetBGTeam() == HORDE ? BG_TEAM_HORDE : BG_TEAM_ALLIANCE;
     pvpMatchInitialize.BattlemasterListID = GetTypeID();
@@ -1092,11 +1108,11 @@ void Battleground::AddPlayer(Player* player)
         {
             player->CastSpell(player, SPELL_PREPARATION, true);   // reduces all mana cost of spells.
 
-            int32 countdownMaxForBGType = isArena() ? ARENA_COUNTDOWN_MAX : BATTLEGROUND_COUNTDOWN_MAX;
+            Seconds countdownMaxForBGType = Seconds(isArena() ? ARENA_COUNTDOWN_MAX : BATTLEGROUND_COUNTDOWN_MAX);
 
             WorldPackets::Misc::StartTimer startTimer;
             startTimer.Type         = 0;
-            startTimer.TimeLeft     = countdownMaxForBGType - (GetElapsedTime() / 1000);
+            startTimer.TimeLeft     = std::chrono::duration_cast<Seconds>(countdownMaxForBGType - Milliseconds(GetElapsedTime()));
             startTimer.TotalTime    = countdownMaxForBGType;
             player->SendDirectMessage(startTimer.Write());
         }
@@ -1667,6 +1683,21 @@ void Battleground::PSendMessageToAll(uint32 entry, ChatMsg msgType, Player const
     BroadcastWorker(localizer);
 
     va_end(ap);
+}
+
+void Battleground::AddPlayerPosition(WorldPackets::Battleground::BattlegroundPlayerPosition const& position)
+{
+    _playerPositions.push_back(position);
+}
+
+void Battleground::RemovePlayerPosition(ObjectGuid guid)
+{
+    auto itr = std::remove_if(_playerPositions.begin(), _playerPositions.end(), [guid](WorldPackets::Battleground::BattlegroundPlayerPosition const& playerPosition)
+    {
+        return playerPosition.Guid == guid;
+    });
+
+    _playerPositions.erase(itr, _playerPositions.end());
 }
 
 void Battleground::EndNow()

@@ -42,6 +42,8 @@
 #endif
 
 DB2Storage<AchievementEntry>                    sAchievementStore("Achievement.db2", AchievementLoadInfo::Instance());
+DB2Storage<AdventureJournalEntry>               sAdventureJournalStore("AdventureJournal.db2", AdventureJournalLoadInfo::Instance());
+DB2Storage<AdventureMapPOIEntry>                sAdventureMapPOIStore("AdventureMapPOI.db2", AdventureMapPoiLoadInfo::Instance());
 DB2Storage<AnimationDataEntry>                  sAnimationDataStore("AnimationData.db2", AnimationDataLoadInfo::Instance());
 DB2Storage<AnimKitEntry>                        sAnimKitStore("AnimKit.db2", AnimKitLoadInfo::Instance());
 DB2Storage<AreaGroupMemberEntry>                sAreaGroupMemberStore("AreaGroupMember.db2", AreaGroupMemberLoadInfo::Instance());
@@ -86,6 +88,7 @@ DB2Storage<CharTitlesEntry>                     sCharTitlesStore("CharTitles.db2
 DB2Storage<CharacterLoadoutEntry>               sCharacterLoadoutStore("CharacterLoadout.db2", CharacterLoadoutLoadInfo::Instance());
 DB2Storage<CharacterLoadoutItemEntry>           sCharacterLoadoutItemStore("CharacterLoadoutItem.db2", CharacterLoadoutItemLoadInfo::Instance());
 DB2Storage<ChatChannelsEntry>                   sChatChannelsStore("ChatChannels.db2", ChatChannelsLoadInfo::Instance());
+DB2Storage<ChrClassUIDisplayEntry>              sChrClassUIDisplayStore("ChrClassUIDisplay.db2", ChrClassUiDisplayLoadInfo::Instance());
 DB2Storage<ChrClassesEntry>                     sChrClassesStore("ChrClasses.db2", ChrClassesLoadInfo::Instance());
 DB2Storage<ChrClassesXPowerTypesEntry>          sChrClassesXPowerTypesStore("ChrClassesXPowerTypes.db2", ChrClassesXPowerTypesLoadInfo::Instance());
 DB2Storage<ChrCustomizationChoiceEntry>         sChrCustomizationChoiceStore("ChrCustomizationChoice.db2", ChrCustomizationChoiceLoadInfo::Instance());
@@ -140,6 +143,7 @@ DB2Storage<GarrPlotInstanceEntry>               sGarrPlotInstanceStore("GarrPlot
 DB2Storage<GarrSiteLevelEntry>                  sGarrSiteLevelStore("GarrSiteLevel.db2", GarrSiteLevelLoadInfo::Instance());
 DB2Storage<GarrSiteLevelPlotInstEntry>          sGarrSiteLevelPlotInstStore("GarrSiteLevelPlotInst.db2", GarrSiteLevelPlotInstLoadInfo::Instance());
 DB2Storage<GemPropertiesEntry>                  sGemPropertiesStore("GemProperties.db2", GemPropertiesLoadInfo::Instance());
+DB2Storage<GlobalCurveEntry>                    sGlobalCurveStore("GlobalCurve.db2", GlobalCurveLoadInfo::Instance());
 DB2Storage<GlyphBindableSpellEntry>             sGlyphBindableSpellStore("GlyphBindableSpell.db2", GlyphBindableSpellLoadInfo::Instance());
 DB2Storage<GlyphPropertiesEntry>                sGlyphPropertiesStore("GlyphProperties.db2", GlyphPropertiesLoadInfo::Instance());
 DB2Storage<GlyphRequiredSpecEntry>              sGlyphRequiredSpecStore("GlyphRequiredSpec.db2", GlyphRequiredSpecLoadInfo::Instance());
@@ -391,6 +395,7 @@ namespace
     std::unordered_map<uint32 /*azeritePowerSetId*/, std::vector<AzeritePowerSetMemberEntry const*>> _azeritePowers;
     std::unordered_map<std::pair<uint32 /*azeriteUnlockSetId*/, ItemContext>, std::array<uint8, MAX_AZERITE_EMPOWERED_TIER>> _azeriteTierUnlockLevels;
     std::unordered_map<std::pair<uint32 /*itemId*/, ItemContext>, AzeriteUnlockMappingEntry const*> _azeriteUnlockMappings;
+    std::array<ChrClassUIDisplayEntry const*, MAX_CLASSES> _uiDisplayByClass;
     std::array<std::array<uint32, MAX_POWERS>, MAX_CLASSES> _powersByClass;
     std::unordered_map<uint32 /*chrCustomizationOptionId*/, std::vector<ChrCustomizationChoiceEntry const*>> _chrCustomizationChoicesByOption;
     std::unordered_map<std::pair<uint8, uint8>, ChrModelEntry const*> _chrModelsByRaceAndGender;
@@ -574,6 +579,8 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
 #define LOAD_DB2(store) LoadDB2(availableDb2Locales, loadErrors, _stores, &store, db2Path, defaultLocale, GetCppRecordSize(store))
 
     LOAD_DB2(sAchievementStore);
+    LOAD_DB2(sAdventureJournalStore);
+    LOAD_DB2(sAdventureMapPOIStore);
     LOAD_DB2(sAnimationDataStore);
     LOAD_DB2(sAnimKitStore);
     LOAD_DB2(sAreaGroupMemberStore);
@@ -617,6 +624,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sCharacterLoadoutStore);
     LOAD_DB2(sCharacterLoadoutItemStore);
     LOAD_DB2(sChatChannelsStore);
+    LOAD_DB2(sChrClassUIDisplayStore);
     LOAD_DB2(sChrClassesStore);
     LOAD_DB2(sChrClassesXPowerTypesStore);
     LOAD_DB2(sChrCustomizationChoiceStore);
@@ -671,6 +679,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sGarrSiteLevelStore);
     LOAD_DB2(sGarrSiteLevelPlotInstStore);
     LOAD_DB2(sGemPropertiesStore);
+    LOAD_DB2(sGlobalCurveStore);
     LOAD_DB2(sGlyphBindableSpellStore);
     LOAD_DB2(sGlyphPropertiesStore);
     LOAD_DB2(sGlyphRequiredSpecStore);
@@ -848,13 +857,13 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     }
 
     // Check loaded DB2 files proper version
-    if (!sAreaTableStore.LookupEntry(13227) ||               // last area added in 8.3.0 (34769)
-        !sCharTitlesStore.LookupEntry(672) ||                // last char title added in 8.3.0 (34769)
-        !sGemPropertiesStore.LookupEntry(3802) ||            // last gem property added in 8.3.0 (34769)
-        !sItemStore.LookupEntry(175264) ||                   // last item added in 8.3.0 (34769)
-        !sItemExtendedCostStore.LookupEntry(6716) ||         // last item extended cost added in 8.3.0 (34769)
-        !sMapStore.LookupEntry(2292) ||                      // last map added in 8.3.0 (34769)
-        !sSpellNameStore.LookupEntry(319960))                // last spell added in 8.3.0 (34769)
+    if (!sAreaTableStore.LookupEntry(13574) ||               // last area added in 9.0.2 (37176)
+        !sCharTitlesStore.LookupEntry(694) ||                // last char title added in 9.0.2 (37176)
+        !sGemPropertiesStore.LookupEntry(3825) ||            // last gem property added in 9.0.2 (37176)
+        !sItemStore.LookupEntry(184869) ||                   // last item added in 9.0.2 (37176)
+        !sItemExtendedCostStore.LookupEntry(7048) ||         // last item extended cost added in 9.0.2 (37176)
+        !sMapStore.LookupEntry(2453) ||                      // last map added in 9.0.2 (37176)
+        !sSpellNameStore.LookupEntry(349043))                // last spell added in 9.0.2 (37176)
     {
         TC_LOG_ERROR("misc", "You have _outdated_ DB2 files. Please extract correct versions from current using client.");
         exit(1);
@@ -930,6 +939,12 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
 
     ASSERT(BATTLE_PET_SPECIES_MAX_ID >= sBattlePetSpeciesStore.GetNumRows(),
         "BATTLE_PET_SPECIES_MAX_ID (%d) must be equal to or greater than %u", BATTLE_PET_SPECIES_MAX_ID, sBattlePetSpeciesStore.GetNumRows());
+
+    for (ChrClassUIDisplayEntry const* uiDisplay : sChrClassUIDisplayStore)
+    {
+        ASSERT(uiDisplay->ChrClassesID < MAX_CLASSES);
+        _uiDisplayByClass[uiDisplay->ChrClassesID] = uiDisplay;
+    }
 
     {
         std::set<ChrClassesXPowerTypesEntry const*, ChrClassesXPowerTypesEntryComparator> powers;
@@ -1463,7 +1478,7 @@ void DB2Manager::LoadHotfixData()
 {
     uint32 oldMSTime = getMSTime();
 
-    QueryResult result = HotfixDatabase.Query("SELECT Id, TableHash, RecordId, Deleted FROM hotfix_data ORDER BY Id");
+    QueryResult result = HotfixDatabase.Query("SELECT Id, TableHash, RecordId, Status FROM hotfix_data ORDER BY Id");
 
     if (!result)
     {
@@ -1482,8 +1497,8 @@ void DB2Manager::LoadHotfixData()
         int32 id = fields[0].GetInt32();
         uint32 tableHash = fields[1].GetUInt32();
         int32 recordId = fields[2].GetInt32();
-        bool deleted = fields[3].GetBool();
-        if (!deleted && _stores.find(tableHash) == _stores.end())
+        HotfixRecord::Status status = static_cast<HotfixRecord::Status>(fields[3].GetUInt8());
+        if (status == HotfixRecord::Status::Valid && _stores.find(tableHash) == _stores.end())
         {
             HotfixBlobKey key = std::make_pair(tableHash, recordId);
             if (std::none_of(_hotfixBlob.begin(), _hotfixBlob.end(), [key](HotfixBlobMap const& blob) { return blob.find(key) != blob.end(); }))
@@ -1498,8 +1513,9 @@ void DB2Manager::LoadHotfixData()
         hotfixRecord.TableHash = tableHash;
         hotfixRecord.RecordID = recordId;
         hotfixRecord.HotfixID = id;
-        _hotfixData.insert(hotfixRecord);
-        deletedRecords[std::make_pair(tableHash, recordId)] = deleted;
+        hotfixRecord.HotfixStatus = status;
+        _hotfixData[id].push_back(hotfixRecord);
+        deletedRecords[std::make_pair(tableHash, recordId)] = status == HotfixRecord::Status::RecordRemoved;
         ++count;
     } while (result->NextRow());
 
@@ -1675,7 +1691,7 @@ void DB2Manager::InsertNewHotfix(uint32 tableHash, uint32 recordId)
     hotfixRecord.TableHash = tableHash;
     hotfixRecord.RecordID = recordId;
     hotfixRecord.HotfixID = ++_maxHotfixId;
-    _hotfixData.insert(hotfixRecord);
+    _hotfixData[hotfixRecord.HotfixID].push_back(hotfixRecord);
 }
 
 std::vector<uint32> DB2Manager::GetAreasForGroup(uint32 areaGroupId) const
@@ -1786,6 +1802,12 @@ char const* DB2Manager::GetBroadcastTextValue(BroadcastTextEntry const* broadcas
         return broadcastText->Text[locale];
 
     return broadcastText->Text[DEFAULT_LOCALE];
+}
+
+ChrClassUIDisplayEntry const* DB2Manager::GetUiDisplayForClass(Classes unitClass) const
+{
+    ASSERT(unitClass < MAX_CLASSES);
+    return _uiDisplayByClass[unitClass];
 }
 
 char const* DB2Manager::GetClassName(uint8 class_, LocaleConstant locale /*= DEFAULT_LOCALE*/)
@@ -2191,9 +2213,13 @@ std::vector<uint32> const* DB2Manager::GetFactionTeamList(uint32 faction) const
     return Trinity::Containers::MapGetValuePtr(_factionTeams, faction);
 }
 
-HeirloomEntry const* DB2Manager::GetHeirloomByItemId(uint32 itemId) const
+uint32 DB2Manager::GetGlobalCurveId(GlobalCurve globalCurveType) const
 {
-    return Trinity::Containers::MapGetValuePtr(_heirlooms, itemId);
+    for (GlobalCurveEntry const* globalCurveEntry : sGlobalCurveStore)
+        if (GlobalCurve(globalCurveEntry->Type) == globalCurveType)
+            return globalCurveEntry->CurveID;
+
+    return 0;
 }
 
 std::vector<uint32> const* DB2Manager::GetGlyphBindableSpells(uint32 glyphPropertiesId) const
@@ -2204,6 +2230,11 @@ std::vector<uint32> const* DB2Manager::GetGlyphBindableSpells(uint32 glyphProper
 std::vector<uint32> const* DB2Manager::GetGlyphRequiredSpecs(uint32 glyphPropertiesId) const
 {
     return Trinity::Containers::MapGetValuePtr(_glyphRequiredSpecs, glyphPropertiesId);
+}
+
+HeirloomEntry const* DB2Manager::GetHeirloomByItemId(uint32 itemId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_heirlooms, itemId);
 }
 
 DB2Manager::ItemBonusList const* DB2Manager::GetItemBonusList(uint32 bonusListId) const
@@ -3119,7 +3150,7 @@ bool DB2Manager::GetUiMapPosition(float x, float y, float z, int32 mapId, int32 
 
     DBCPosition2D uiPosition
     {
-        // x any y are swapped
+        // x and y are swapped
         ((1.0f - (1.0f - relativePosition.Y)) * uiMapAssignment->UiMin.X) + ((1.0f - relativePosition.Y) * uiMapAssignment->UiMax.X),
         ((1.0f - (1.0f - relativePosition.X)) * uiMapAssignment->UiMin.Y) + ((1.0f - relativePosition.X) * uiMapAssignment->UiMax.Y)
     };
@@ -3144,10 +3175,11 @@ void DB2Manager::Zone2MapCoordinates(uint32 areaId, float& x, float& y) const
         if (assignment.second->MapID >= 0 && assignment.second->MapID != areaEntry->ContinentID)
             continue;
 
-        float tmpY = 1.0 - ((y - assignment.second->UiMin.Y) / (assignment.second->UiMax.Y - assignment.second->UiMin.Y));
-        float tmpX = 1.0 - ((x - assignment.second->UiMin.X) / (assignment.second->UiMax.X - assignment.second->UiMin.X));
-        y = ((1.0 - tmpY) * assignment.second->Region[0].X) + (tmpY * assignment.second->Region[1].X);
-        x = ((1.0 - tmpX) * assignment.second->Region[0].Y) + (tmpX * assignment.second->Region[1].Y);
+        float tmpY = (y - assignment.second->UiMax.Y) / (assignment.second->UiMin.Y - assignment.second->UiMax.Y);
+        float tmpX = (x - assignment.second->UiMax.X) / (assignment.second->UiMin.X - assignment.second->UiMax.X);
+        x = assignment.second->Region[0].X + tmpY * (assignment.second->Region[1].X - assignment.second->Region[0].X);
+        y = assignment.second->Region[0].Y + tmpX * (assignment.second->Region[1].Y - assignment.second->Region[0].Y);
+
         break;
     }
 }

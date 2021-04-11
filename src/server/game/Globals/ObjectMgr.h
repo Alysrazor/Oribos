@@ -680,6 +680,7 @@ struct PointOfInterest
     uint32 Icon;
     uint32 Flags;
     uint32 Importance;
+    uint32 Unknown905;
     std::string Name;
 };
 
@@ -788,10 +789,11 @@ typedef std::unordered_map<uint32, std::string> RealmNameContainer;
 
 struct SceneTemplate
 {
-    uint32 SceneId;
-    uint32 PlaybackFlags;
-    uint32 ScenePackageId;
-    uint32 ScriptId;
+    uint32 SceneId = 0;
+    uint32 PlaybackFlags = 0;
+    uint32 ScenePackageId = 0;
+    bool Encrypted = false;
+    uint32 ScriptId = 0;
 };
 
 typedef std::unordered_map<uint32, SceneTemplate> SceneTemplateContainer;
@@ -1098,6 +1100,7 @@ class TC_GAME_API ObjectMgr
         }
 
         QuestMap const& GetQuestTemplates() const { return _questTemplates; }
+        std::vector<Quest const*> const& GetQuestTemplatesAutoPush() const { return _questTemplatesAutoPush; }
 
         QuestObjective const* GetQuestObjective(uint32 questObjectiveId) const
         {
@@ -1701,6 +1704,7 @@ class TC_GAME_API ObjectMgr
         std::map<HighGuid, std::unique_ptr<ObjectGuidGeneratorBase>> _guidGenerators;
 
         QuestMap _questTemplates;
+        std::vector<Quest const*> _questTemplatesAutoPush;
         QuestObjectivesByIdContainer _questObjectives;
 
         typedef std::unordered_map<uint32, NpcText> NpcTextContainer;

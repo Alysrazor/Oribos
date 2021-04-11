@@ -19,7 +19,9 @@
 #include "AchievementPackets.h"
 #include "DatabaseEnv.h"
 #include "DB2Structure.h"
+#include "Group.h"
 #include "Log.h"
+#include "Map.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 
@@ -91,7 +93,7 @@ void QuestObjectiveCriteriaMgr::LoadFromDB(PreparedQueryResult objectiveResult, 
             Field* fields = criteriaResult->Fetch();
             uint32 criteriaId = fields[0].GetUInt32();
             uint64 counter = fields[1].GetUInt64();
-            time_t date = time_t(fields[2].GetUInt32());
+            time_t date = fields[2].GetInt64();
 
             Criteria const* criteria = sCriteriaMgr->GetCriteria(criteriaId);
             if (!criteria)
@@ -152,7 +154,7 @@ void QuestObjectiveCriteriaMgr::SaveToDB(CharacterDatabaseTransaction& trans)
                 stmt->setUInt64(0, _owner->GetGUID().GetCounter());
                 stmt->setUInt32(1, criteriaProgres.first);
                 stmt->setUInt64(2, criteriaProgres.second.Counter);
-                stmt->setUInt32(3, uint32(criteriaProgres.second.Date));
+                stmt->setInt64(3, criteriaProgres.second.Date);
                 trans->Append(stmt);
             }
 
@@ -223,16 +225,12 @@ void QuestObjectiveCriteriaMgr::SendAllData(Player const* /*receiver*/) const
     }
 }
 
-void QuestObjectiveCriteriaMgr::CompletedObjective(QuestObjective const* questObjective, Player* referencePlayer)
+void QuestObjectiveCriteriaMgr::CompletedObjective(QuestObjective const* questObjective, Player* /*referencePlayer*/)
 {
-    // disable for gamemasters with GM-mode enabled
-    if (_owner->IsGameMaster())
-        return;
-
     if (HasCompletedObjective(questObjective))
         return;
 
-    referencePlayer->KillCreditCriteriaTreeObjective(*questObjective);
+    _owner->KillCreditCriteriaTreeObjective(*questObjective);
 
     TC_LOG_INFO("criteria.quest", "QuestObjectiveCriteriaMgr::CompletedObjective(%u). %s", questObjective->ID, GetOwnerInfo().c_str());
 
@@ -244,7 +242,7 @@ bool QuestObjectiveCriteriaMgr::HasCompletedObjective(QuestObjective const* ques
     return _completedObjectives.find(questObjective->ID) != _completedObjectives.end();
 }
 
-void QuestObjectiveCriteriaMgr::SendCriteriaUpdate(Criteria const* criteria, CriteriaProgress const* progress, uint32 timeElapsed, bool timedCompleted) const
+void QuestObjectiveCriteriaMgr::SendCriteriaUpdate(Criteria const* criteria, CriteriaProgress const* progress, Seconds timeElapsed, bool timedCompleted) const
 {
     WorldPackets::Achievement::CriteriaUpdate criteriaUpdate;
 
@@ -278,6 +276,21 @@ bool QuestObjectiveCriteriaMgr::CanUpdateCriteriaTree(Criteria const* criteria, 
     if (HasCompletedObjective(objective))
     {
         TC_LOG_TRACE("criteria.quest", "QuestObjectiveCriteriaMgr::CanUpdateCriteriaTree: (Id: %u Type %s Quest Objective %u) Objective already completed",
+            criteria->ID, CriteriaMgr::GetCriteriaTypeString(criteria->Entry->Type), objective->ID);
+        return false;
+    }
+
+    if (_owner->GetQuestStatus(objective->QuestID) != QUEST_STATUS_INCOMPLETE)
+    {
+        TC_LOG_TRACE("criteria.quest", "QuestObjectiveCriteriaMgr::CanUpdateCriteriaTree: (Id: %u Type %s Quest Objective %u) Not on quest",
+            criteria->ID, CriteriaMgr::GetCriteriaTypeString(criteria->Entry->Type), objective->ID);
+        return false;
+    }
+
+    Quest const* quest = ASSERT_NOTNULL(sObjectMgr->GetQuestTemplate(objective->QuestID));
+    if (_owner->GetGroup() && _owner->GetGroup()->isRaidGroup() && !quest->IsAllowedInRaid(referencePlayer->GetMap()->GetDifficultyID()))
+    {
+        TC_LOG_TRACE("criteria.quest", "QuestObjectiveCriteriaMgr::CanUpdateCriteriaTree: (Id: %u Type %s Quest Objective %u) Quest cannot be completed in raid group",
             criteria->ID, CriteriaMgr::GetCriteriaTypeString(criteria->Entry->Type), objective->ID);
         return false;
     }
