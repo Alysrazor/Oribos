@@ -16,11 +16,11 @@
  */
 
 // This is where scripts' loading functions should be declared:
-void AddAlysrazorScripts();
+void AddAlysrazorEversongForestScripts();
 
 // The name of this function should match:
 // void Add${NameOfDirectory}Scripts()
-void AddCustomScripts()
+void AddAlysrazorEasternKingdomsScripts()
 {
-    AddAlysrazorScripts();
+	AddAlysrazorEversongForestScripts();
 }
