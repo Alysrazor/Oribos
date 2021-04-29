@@ -503,6 +503,7 @@ SpellValue::SpellValue(SpellInfo const* proto, Unit const* caster)
     MaxAffectedTargets = proto->MaxAffectedTargets;
     RadiusMod = 1.0f;
     AuraStackAmount = 1;
+    DurationMul = 1;
 }
 
 class TC_GAME_API SpellEvent : public BasicEvent
@@ -2717,6 +2718,8 @@ SpellMissInfo Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask)
 
                     if (duration > 0)
                     {
+                        duration *= m_spellValue->DurationMul;
+
                         // Haste modifies duration of channeled spells
                         if (m_spellInfo->IsChanneled())
                             m_originalCaster->ModSpellDurationTime(m_spellInfo, duration, this);
@@ -3369,13 +3372,15 @@ void Spell::_cast(bool skipCheck)
 
     CallScriptAfterCastHandlers();
 
-    if (const std::vector<int32> *spell_triggered = sSpellMgr->GetSpellLinked(m_spellInfo->Id))
+    if (std::vector<int32> const* spell_triggered = sSpellMgr->GetSpellLinked(m_spellInfo->Id))
     {
-        for (std::vector<int32>::const_iterator i = spell_triggered->begin(); i != spell_triggered->end(); ++i)
-            if (*i < 0)
-                m_caster->RemoveAurasDueToSpell(-(*i));
+        for (int32 id : *spell_triggered)
+        {
+            if (id < 0)
+                m_caster->RemoveAurasDueToSpell(-id);
             else
-                m_caster->CastSpell(m_targets.GetUnitTarget() ? m_targets.GetUnitTarget() : m_caster, *i, true);
+                m_caster->CastSpell(m_targets.GetUnitTarget() ? m_targets.GetUnitTarget() : m_caster, id, true);
+        }
     }
 
     if (modOwner)
@@ -3432,6 +3437,8 @@ void Spell::handle_immediate()
             // Apply duration mod
             if (Player* modOwner = m_caster->GetSpellModOwner())
                 modOwner->ApplySpellMod(m_spellInfo, SpellModOp::Duration, duration);
+
+            duration *= m_spellValue->DurationMul;
 
             // Apply haste mods
             m_caster->ModSpellDurationTime(m_spellInfo, duration, this);
@@ -5424,8 +5431,8 @@ SpellCastResult Spell::CheckCast(bool strict, uint32* param1 /*= nullptr*/, uint
                 if (!pet->HaveInDiet(foodItem->GetTemplate()))
                     return SPELL_FAILED_WRONG_PET_FOOD;
 
-                if (!pet->GetCurrentFoodBenefitLevel(foodItem->GetTemplate()->GetBaseItemLevel()))
-                    return SPELL_FAILED_FOOD_LOWLEVEL;
+                if (foodItem->GetTemplate()->GetBaseItemLevel() + 30 <= pet->getLevel())
+                   return SPELL_FAILED_FOOD_LOWLEVEL;
 
                 if (m_caster->IsInCombat() || pet->IsInCombat())
                     return SPELL_FAILED_AFFECTING_COMBAT;
@@ -7554,6 +7561,9 @@ void Spell::SetSpellValue(SpellValueMod mod, int32 value)
             break;
         case SPELLVALUE_AURA_STACK:
             m_spellValue->AuraStackAmount = uint8(value);
+            break;
+        case SPELLVALUE_DURATION_PCT:
+            m_spellValue->DurationMul = float(value) / 100.0f;
             break;
         default:
             break;
