@@ -1,5 +1,5 @@
 /*
- * This file is part of the TrinityCore Project. See AUTHORS file for Copyright information
+ * (C) Alysrazor 2021
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -15,12 +15,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// This is where scripts' loading functions should be declared:
-void AddAlysrazorCustomBossesScripts();
+#include "Define.h"
 
-// The name of this function should match:
-// void Add${NameOfDirectory}Scripts()
-void AddAlysrazorScripts()
+#ifndef ZONE_EVERSONG_FOREST_H_
+#define ZONE_EVERSONG_FOREST_H_
+
+
+
+// Sunstrider Island
+enum CreatureIds : uint16
 {
-    AddAlysrazorCustomBossesScripts();
-}
+    NPC_MANA_WYRM           = 121221,
+    NPC_SPRINGPAW_LYNX      = 323232,
+    NPC_TRENT               = 343737,
+    NPC_ANCIENT_TRENT       = 476476,
+};
+
+
+
+
+#endif
